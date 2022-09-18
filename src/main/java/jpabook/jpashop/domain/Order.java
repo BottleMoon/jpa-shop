@@ -41,7 +41,6 @@ public class Order {
     //양방향 연관관계를 편하게 해주는 메서드
     private void setMember(Member member) {
         this.member = member;
-        ;
     }
 
     private void addOrderItem(OrderItem orderItem) {
