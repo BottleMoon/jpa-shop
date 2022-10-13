@@ -150,11 +150,27 @@
     - JPA 표준스팩이고 jpql을 사용하는 것 보단 낫지만, 유지보수성이 힘들고 가독성이 떨어짐.
 - Querydsl 사용
 
+## 변경 감지와 병합
+
+### 변경 감지 (dirty checking)
+
+- 영속성 컨텍스트에서 엔티티를 조회한 후에 영속상태인 엔티티를 수정.
+
+### 병합 (merge)
+
+- em.merge()
+- 준영속 엔티티의 식별자 값으로 영속 엔티티를 조회.
+- 영속 엔티티의 값을 준영속 엔티티의 값으로 모두 교체한다.
+
+> **주의**: 변경 감지 기능을 사용하면 원하는 속성만 선택해서 변경할 수 있지만, 병합을 사용하면 모든 속성이 변경된다.
+> 병합시 값이 없으면 null로 업데이트 할 위험도 있다. (merge 는 모든 필드를 교체한다.)
+> **엔티티를 변경할 떄는 항상 변경 감지(dirty checking) 을 사용하자.**
+
 ## 메모
 
 @PersistenceContext
 
-- 다른 설정 필요 없이 EntitiyManager 를 주입해줌.
+- 다른 설정 필요 없이 EntityManager 를 주입해줌.
 
 @Transactional
 
@@ -162,6 +178,11 @@
 - @Transactional 이 붙은 클래스와 메서드는 트랜잭션 처리가 된다.
 - test에 @Transactional 어노테이션이 붙으면 테스트가 끝나고 롤백을 한다.
 - 롤백을 하기 싫으면 @Rollback(false) 를 달면 된다.
+
+### Service단에서 id를 넘겨받아 조회하는 이유
+
+- controller단에서 entity를 조회해서 service단으로 넘기면 Service단의 Transaction 바깥에서 조회했기 때문에 영속 상태가 애매해진다.
+    - controller에선 엔티티를 넘겨주지 말고 id정도만 넘겨주고 Service의 Transaction 안에서 비지니스 로직을 처리하는 것이 좋다.
 
 ### 테스트
 

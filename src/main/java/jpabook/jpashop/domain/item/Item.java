@@ -33,6 +33,12 @@ public abstract class Item {
     @OneToMany(mappedBy = "item")
     private List<CategoryItem> categoryItems = new ArrayList<>();
 
+    public void updateItem(String name, int price, int stockQuantity) {
+        this.name = name;
+        this.price = price;
+        this.stockQuantity = stockQuantity;
+    }
+    
     //비지니스 로직
 
     /**

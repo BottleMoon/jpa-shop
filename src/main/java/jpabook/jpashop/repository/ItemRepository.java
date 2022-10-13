@@ -16,18 +16,14 @@ public class ItemRepository {
     }
 
     public void save(Item item) {
-        if (item.getId() == null) {
-            em.persist(item);
-        } else {
-            em.merge(item);
-        }
+        em.persist(item);
     }
 
     public Item findOne(Long id) {
         return em.find(Item.class, id);
     }
 
-    public List<Item> findAll() {
+    public List<Item> findItems() {
         return em.createQuery("select i from Item i", Item.class).getResultList();
     }
 }
