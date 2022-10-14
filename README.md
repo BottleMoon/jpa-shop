@@ -1,4 +1,4 @@
-# 스프링 부트 + JPA 실전 예제
+# 스프링 부트와 JPA 활용1
 
 인프런 김영한님의 실전! 스프링 부트와 JPA 활용1을 들으며 따라 만드는 프로젝트입니다.
 
@@ -189,3 +189,35 @@
 테스트 패키지에 resources 폴더를 만들어 설정 파일을 생성해 테스트의 설정 파일을 따로 만드는게 좋다.
 
 - 테스트 DB는 인메모리를 사용하자
+
+# 스프링 부트와 JPA 활용2
+
+## API 개발 기본
+
+- 엔티티를 외부로 노출하지 마라 (DTO를 써야 함.)
+    - 실무에서 엔티티나 API 스펙이 중간에 수정될 수도 있다. 그런데 엔티티와 API스펙이 1대1로 매핑되어 버리면 엔티티나 API 스펙이 변경될 때 문제가 생길 가능성이 크다. API 스펙을 위한 별도의
+      클래스를 만들어야 한다. 그게 DTO
+    - 한 엔티티에 여러가지 API 스펙이 있을 수 있는데 그럴 땐 각각의 API스펙에 맞춰서 DTO를 생성하면 된다.
+    - API스펙에 맞게 만든 클래스이기 때문에 API스펙 문서를 보지 않아도 어떤 필드가 넘어 오는지 알 수 있다.
+- collection 을 그대로 보내면 배열로 json이 보내져서 유연성이 떨어진다.
+    - 제네릭 클래스를 생성한 뒤 한번 감싸서 보내면 됨 다른 정보를 추가할 수 있다
+    - ex)
+
+      ```java
+      @GetMapping("/api/v2/members")
+          public Result membersV2() {
+              List<Member> findMembers = memberService.findMembers();
+              List<MemberDto> collect = findMembers.stream().map(m -> new MemberDto(m.getName()))
+                      .collect(Collectors.toList());
+              return new Result(collect.size(), collect);
+          }
+      
+          //이렇게 한번 감싸주는 이유
+          //collection으로 바로 내면 json이 배열타입으로 나가기 때문에 유연성이 떨어진다.
+          @Data
+          @AllArgsConstructor
+          static class Result<T> {
+              private int count;
+              private T data;
+          }
+      ```
