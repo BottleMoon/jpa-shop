@@ -203,21 +203,216 @@
     - 제네릭 클래스를 생성한 뒤 한번 감싸서 보내면 됨 다른 정보를 추가할 수 있다
     - ex)
 
-      ```java
-      @GetMapping("/api/v2/members")
-          public Result membersV2() {
-              List<Member> findMembers = memberService.findMembers();
-              List<MemberDto> collect = findMembers.stream().map(m -> new MemberDto(m.getName()))
-                      .collect(Collectors.toList());
-              return new Result(collect.size(), collect);
-          }
+  ```java
+  @GetMapping("/api/v2/members")
+  public Result membersV2() {
+      List<Member> findMembers = memberService.findMembers();
+      List<MemberDto> collect = findMembers.stream().map(m -> new MemberDto(m.getName()))
+              .collect(Collectors.toList());
+      return new Result(collect.size(), collect);
+  }
       
-          //이렇게 한번 감싸주는 이유
-          //collection으로 바로 내면 json이 배열타입으로 나가기 때문에 유연성이 떨어진다.
-          @Data
-          @AllArgsConstructor
-          static class Result<T> {
-              private int count;
-              private T data;
-          }
-      ```
+  //이렇게 한번 감싸주는 이유
+  //collection으로 바로 내면 json이 배열타입으로 나가기 때문에 유연성이 떨어진다.
+  @Data
+  @AllArgsConstructor
+  static class Result<T> {
+      private int count;
+      private T data;
+  }
+  ```
+  ## API 개발 고급
+
+### 지연 로딩과 조회 성능 최적화
+
+**v1. 엔티티 직접 노출**
+
+OrderSimpleController.java
+
+```sql
+@
+GetMapping
+("/api/v1/simple-orders")
+public List<Order> ordersV1() {
+    List<Order> all = orderRepository.findAllByString(new OrderSearch());
+    return
+all;
+}
+```
+
+**v2. 엔티티를 DTO로 변환**
+
+OrderSimpleApiRepository.java
+
+```java
+//엔티티를 DTO로 변환
+@GetMapping("/api/v2/simple-orders")
+publicList<SimpleOrderDto> ordersV2(){
+        List<Order> orders=orderRepository.findAllByString(new OrderSearch());
+
+        List<SimpleOrderDto> result=orders.stream()
+        .map(SimpleOrderDto::new)
+        .collect(Collectors.toList());
+        return result;
+        }
+
+@Data
+static class SimpleOrderDto {
+    private Long orderId;
+    private String name;
+    private LocalDateTime orderDate;
+    privateOrderStatusorderStatus;
+    private Address address;
+
+    public SimpleOrderDto(Orderorder) {
+        orderId = order.getId();
+        name = order.getMember().getName();//LAZY 초기화
+        orderDate = order.getOrderDate();
+        orderStatus = order.getStatus();
+        address = order.getDelivery().getAddress();//LAZY 초기화
+    }
+}
+```
+
+**v3. fetch join으로 최적화**
+
+- fetch join은 LAZY를 무시하고 PROXY 객체가 아닌 member와 delivery의 값을 다 채워서 한번에 가져온다
+- fetch join으로 member와 delivery가 이미 영속화 되어있기 때문에 지연로딩이 일어나지 않는다.
+- 따라서 쿼리 한번으로 조회되기 때문에 N+1이 해결된다.
+
+OrderSimpleApiController.java
+
+```java
+@GetMapping("/api/v3/simple-orders")
+public List<SimpleOrderDto> ordersV3(){
+        List<Order> orders=orderRepository.findAllWithMemberDelivery();
+        return orders.stream().map(Simple OrderDto::new).collect(Collectors.toList());
+        }
+```
+
+OrderRepository.java
+
+```java
+public List<Order> findAllWithMemberDelivery(){
+        return em.createQuery(
+        "select o from Order o"+
+        " join fetch o.member m"+
+        " join fetch o.delivery d",Order.class
+    ).getResultList();
+            }
+```
+
+**v4. JPA에서 DTO로 바로 조회**
+
+OrderSimpleApiController.java
+
+```java
+@GetMapping("/api/v4/simple-orders")
+public List<OrderSimpleQueryDto> ordersV4(){
+        return orderRepository.findOrderDtos();
+        }
+```
+
+OrderRepository.java
+
+```java
+public List<OrderSimpleQueryDto> findOrderDtos(){
+        return em.createQuery(
+        "select new jpabook.jpashop.repository.OrderSimpleQueryDto(o.id, m.name, o.orderDate, o.status, d.address)"+
+        " from Order o"+
+        " join o.member m"+
+        " join o.delivery d",OrderSimpleQueryDto.class)
+        .getResultList();
+
+        }
+```
+
+OrderSimpleQueryDto.java
+
+```java
+
+@Data
+public class OrderSimpleQueryDto {
+    private Long orderId;
+    private String name;
+    private LocalDateTime orderDate;
+    private OrderStatus orderStatus;
+    private Address address;
+
+    public OrderSimpleQueryDto(Long orderId, String name, LocalDateTime orderDate, OrderStatus orderStatus, Address address) {
+        this.orderId = orderId;
+        this.name = name;
+        this.orderDate = orderDate;
+        this.orderStatus = orderStatus;
+        this.address = address;
+    }
+}
+```
+
+v3의 쿼리
+
+```sql
+select order0_.order_id       as order_id1_6_0_,
+       member1_.member_id     as member_i1_4_1_,
+       delivery2_.delivery_id as delivery1_2_2_,
+       order0_.delivery_id    as delivery4_6_0_,
+       order0_.member_id      as member_i5_6_0_,
+       order0_.order_date     as order_da2_6_0_,
+       order0_.status         as status3_6_0_,
+       member1_.city          as city2_4_1_,
+       member1_.street        as street3_4_1_,
+       member1_.zipcode       as zipcode4_4_1_,
+       member1_.name          as name5_4_1_,
+       delivery2_.city        as city2_2_2_,
+       delivery2_.street      as street3_2_2_,
+       delivery2_.zipcode     as zipcode4_2_2_,
+       delivery2_.status      as status5_2_2_
+from orders order0_
+         inner join
+     member member1_ on order0_.member_id = member1_.member_id
+         inner join
+     delivery delivery2_ on order0_.delivery_id = delivery2_.delivery_id
+```
+
+v4의 쿼리
+
+```sql
+select order0_.order_id   as col_0_0_,
+       member1_.name      as col_1_0_,
+       order0_.order_date as col_2_0_,
+       order0_.status     as col_3_0_,
+       delivery2_.city    as col_4_0_,
+       delivery2_.street  as col_4_1_,
+       delivery2_.zipcode as col_4_2_
+from orders order0_
+         inner join
+     member member1_ on order0_.member_id = member1_.member_id
+         inner join
+     delivery delivery2_ on order0_.delivery_id = delivery2_.delivery_id
+```
+
+**v3의 장점**
+
+- v2보단 훨씬 성능 최적화가 된다. (N+1 문제 해결)
+- 코드를 짜기 쉽다.
+- DTO를 바꿔도 재사용이 용이하다.
+
+**v4의 장점**
+
+- v3보다 조금 더 최적화가 된다.(애플리케이션 네트워크 용량 최적화)
+
+**v4의 단점**
+
+- 하나의 DTO에 맞춰서 쿼리를 짜기 때문에 repository 재사용성이 떨어짐.
+- repository에 API 스펙이 들어가버린다. (계층이 깨져버림)
+    - 쿼리 전용 repository를 만들어서 계층을 나누는 방법이 있다.
+- 코드가 지저분해진다.
+
+> 어떤 방식이 더 좋다고 할 순 없다고 한다. 상황에 따라 선택하면 된다.
+
+
+> **쿼리 방식 선택 권장 순서**
+> 1. 우선 엔티티를 DTO로 변환하는 방법을 선택한다.
+> 2. 필요하면 fetch join으로 성능을 최적화한다. → 대부분의 성능 이슈가 해결된다.
+> 3. 그래도 안되면 DTO로 직접 조회하는 방법을 사용한다.
+> 4. 최후의 방법은 JPA가 제공하는 네이티브 SQL이나 스프링 JDBC Template를 사용해서 SQL을 직접 사용한다.
